@@ -45,13 +45,18 @@ class CustomPlayer(DataPlayer):
         # EXAMPLE: choose a random move without any search--this function MUST
         #          call self.queue.put(ACTION) at least once before time expires
         #          (the timer is automatically managed for you)
-                
+        
+        # act greedy in the first 2 moves
         if state.ply_count < 2:
-            self.queue.put(random.choice(state.actions()))
+            #self.queue.put(random.choice(state.actions()))
+            self.queue.put(max(state.actions(), key=lambda x: self.greedy_score(state.result(x))))
         else:
             self.queue.put(MonteCarloTreeSearch(state))
     
-
+    def greedy_score(self, state):
+        own_loc = state.locs[self.player_id]
+        own_liberties = state.liberties(own_loc)
+        return len(own_liberties)
 
 class MonteCarloTreeNode():
     def __init__(self, state, parent=None):
@@ -89,8 +94,10 @@ def MonteCarloTreeSearch(state):
             reward = MCTS_reward(child.state)
             MCTS_backprop(child, reward)
 
-    best_child_id = parent.children.index(MCTS_best_child(parent))
-    return parent.children_actions[best_child_id]
+    best_child = MCTS_best_child(parent)
+    best_child_id = parent.children.index(best_child)
+    best_action = parent.children_actions[best_child_id]
+    return best_action
 
 
 def MCTS_policy(node):
@@ -99,7 +106,6 @@ def MCTS_policy(node):
     while not node.state.terminal_test():
         if not node.fully_explored():
             return MCTS_expand(node)
-
         node = MCTS_best_child(node)
 
     return node
@@ -112,6 +118,8 @@ def MCTS_expand(parent):
             parent.add_child(new_state, action)
             return parent.children[-1]
 
+    return parent
+
 
 def MCTS_best_child(parent):
     #Find the child node with the best score.
@@ -119,10 +127,11 @@ def MCTS_best_child(parent):
 
     best_score = float("-inf")
     best_children = []
+
     for child in parent.children:
-        exploit = child.total_reward / child.visits_count
-        explore = (2. * math.log(parent.visits_count) / child.visits_count)**.5
-        score = exploit + EXPLORE_FACTOR * explore
+        exploit_score = child.total_reward / child.visits_count
+        explore_score = (2. * math.log(parent.visits_count) / child.visits_count)**.5
+        score = exploit_score + EXPLORE_FACTOR * explore_score
         if score == best_score:
             best_children.append(child)
         elif score > best_score:
@@ -148,5 +157,5 @@ def MCTS_backprop(node, reward):
 
     while node:
         node.update(reward)
-        node = node.parent
+        node = node.parent #go up in the path
         reward *= -1
